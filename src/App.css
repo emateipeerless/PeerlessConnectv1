@@ -54,6 +54,23 @@
   color: #9aa8bf;
 }
 
+.meta-pill--live {
+  color: #5fd68a;
+  border-color: #2d6a4a;
+}
+
+.meta-pill--pulse {
+  color: #8bb8d9;
+  border-color: #2d6a9f;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.65;
+  }
+}
+
 .pump-section {
   margin-bottom: 2rem;
 }

@@ -62,15 +62,19 @@ export const ANALOGS: AnalogMapping[] = [
 /** Jockey discharge — TCP register 18 (not yet polled on all devices) */
 export const JOCKEY_DISCHARGE_REG = '18';
 
-/** Main pump: TCP 1800 bits 0–1 → 00=OFF, 01=AUTO, 10=MANUAL */
-export const MAIN_SWITCH = { reg: '1800', bitOffset: 0 } as const;
+/** Main pump switch — TCP registers (see M3D mapping sheet) */
+export const MAIN_SWITCH_BITS = {
+  auto: { reg: '2012', bit: 10 },
+  manual: { reg: '2012', bit: 11 },
+  off: { reg: '1800', bit: 1 },
+} as const;
 
 /**
- * Jockey pump status word — RTU register 12, delivered as `rtu.status` in the IoT packet.
- * Switch: bit2=AUTO, bit3=MANUAL, both clear=OFF
+ * Jockey pump status word — RTU register 12 (`rtu.status` or tcp key `"12"`).
+ * Switch uses the same word as JOCKEY_STATUS_BITS: bit2=AUTO, bit3=MANUAL, both clear=OFF.
  */
+export const JOCKEY_RTU_STATUS_REG = '12';
 export const JOCKEY_RTU_STATUS_FIELD = 'status' as const;
-
 export const JOCKEY_SWITCH_BITS = { auto: 2, manual: 3 } as const;
 
 export const JOCKEY_STATUS_BITS: RtuBitMapping[] = [
@@ -102,18 +106,17 @@ export function isBitSet(value: number, bit: number): boolean {
   return ((value >> bit) & 1) === 1;
 }
 
-export function decodeTwoBitSwitch(value: number, bitOffset: number): SwitchMode {
-  const code = (value >> bitOffset) & 0b11;
-  switch (code) {
-    case 1:
-      return 'AUTO';
-    case 2:
-      return 'MANUAL';
-    default:
-      return 'OFF';
-  }
+/** Main switch from TCP 2012 (auto/manual) and TCP 1800 (off). Manual wins over auto. */
+export function decodeMainSwitch(getReg: (reg: string) => number): SwitchMode {
+  const modeReg = getReg(MAIN_SWITCH_BITS.auto.reg);
+  const offReg = getReg(MAIN_SWITCH_BITS.off.reg);
+  if (isBitSet(modeReg, MAIN_SWITCH_BITS.manual.bit)) return 'MANUAL';
+  if (isBitSet(modeReg, MAIN_SWITCH_BITS.auto.bit)) return 'AUTO';
+  if (isBitSet(offReg, MAIN_SWITCH_BITS.off.bit)) return 'OFF';
+  return 'OFF';
 }
 
+/** Jockey switch from RTU status register 12 — same word as status lamps. */
 export function decodeJockeySwitch(value: number): SwitchMode {
   const auto = isBitSet(value, JOCKEY_SWITCH_BITS.auto);
   const manual = isBitSet(value, JOCKEY_SWITCH_BITS.manual);

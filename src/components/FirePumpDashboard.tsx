@@ -64,7 +64,21 @@ function StatusLampPanel({
   );
 }
 
-export function FirePumpDashboard({ snapshot }: { snapshot: FirePumpSnapshot }) {
+type FirePumpDashboardProps = {
+  snapshot: FirePumpSnapshot;
+  lastRefresh?: Date | null;
+  isRefreshing?: boolean;
+  refreshIntervalMs?: number;
+  isLive?: boolean;
+};
+
+export function FirePumpDashboard({
+  snapshot,
+  lastRefresh,
+  isRefreshing = false,
+  refreshIntervalMs = 7000,
+  isLive = false,
+}: FirePumpDashboardProps) {
   const { mainPump, jockeyPump } = snapshot;
   const mainTroubles = mainPump.alarms.filter((a) => a.active && !a.okWhenActive);
   const jockeyTroubles = jockeyPump.status.filter((a) => a.active && !a.okWhenActive);
@@ -80,8 +94,13 @@ export function FirePumpDashboard({ snapshot }: { snapshot: FirePumpSnapshot }) 
         </div>
         <div className="dashboard__meta">
           <span className="meta-pill">Template: {snapshot.template}</span>
+          {isLive && (
+            <span className={`meta-pill ${isRefreshing ? 'meta-pill--pulse' : 'meta-pill--live'}`}>
+              {isRefreshing ? 'Refreshing…' : `Live · ${refreshIntervalMs / 1000}s`}
+            </span>
+          )}
           <span className="meta-pill meta-pill--muted">
-            Updated {new Date(snapshot.receivedAt).toLocaleString()}
+            Updated {(lastRefresh ?? new Date(snapshot.receivedAt)).toLocaleString()}
           </span>
         </div>
       </header>

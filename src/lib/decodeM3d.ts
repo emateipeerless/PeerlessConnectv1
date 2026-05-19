@@ -4,11 +4,10 @@ import {
   ANALOGS,
   JOCKEY_DISCHARGE_REG,
   JOCKEY_STATUS_BITS,
-  MAIN_SWITCH,
   alarmId,
   decodeJockeySwitch,
+  decodeMainSwitch,
   decodeRtuStatusBits,
-  decodeTwoBitSwitch,
   isBitSet,
   scaleAnalog,
 } from './m3dRegisters';
@@ -19,9 +18,13 @@ function tcpValue(packet: M3dPacket, reg: string): number {
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
 }
 
-function rtuStatusWord(packet: M3dPacket): number {
+function jockeyStatusWord(packet: M3dPacket): number {
   const raw = packet.rtu.status;
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0;
+}
+
+function hasJockeyStatusWord(packet: M3dPacket): boolean {
+  return hasRtuField(packet, 'status');
 }
 
 function decodeTcpStatusBits(
@@ -46,21 +49,17 @@ export function decodeM3dPacket(
   packet: M3dPacket,
   receivedAt: Date = new Date(),
 ): FirePumpSnapshot {
-  const mainSwitchMode = decodeTwoBitSwitch(
-    tcpValue(packet, MAIN_SWITCH.reg),
-    MAIN_SWITCH.bitOffset,
-  );
+  const mainSwitchMode = decodeMainSwitch((reg) => tcpValue(packet, reg));
 
-  const hasJockeyStatus = hasRtuField(packet, 'status');
+  const hasJockeyStatus = hasJockeyStatusWord(packet);
   const hasJockeyDischarge = hasTcpRegister(packet, JOCKEY_DISCHARGE_REG);
 
-  const jockeyStatusWord = rtuStatusWord(packet);
-  const jockeySwitchMode = hasJockeyStatus
-    ? decodeJockeySwitch(jockeyStatusWord)
-    : 'OFF';
   const jockeyStatus = hasJockeyStatus
-    ? decodeRtuStatusBits(jockeyStatusWord, JOCKEY_STATUS_BITS)
+    ? decodeRtuStatusBits(jockeyStatusWord(packet), JOCKEY_STATUS_BITS)
     : [];
+  const jockeySwitchMode = hasJockeyStatus
+    ? decodeJockeySwitch(jockeyStatusWord(packet))
+    : 'OFF';
 
   const analogs = ANALOGS.map(({ label, reg, unit, decimals }) => ({
     id: alarmId(label),
@@ -94,9 +93,9 @@ export function decodeM3dPacket(
     },
     jockeyPump: {
       switchMode: jockeySwitchMode,
-      runHours: packet.rtu.rhrs,
-      startCount: packet.rtu.start,
-      stopCount: packet.rtu.stop,
+      runHours: packet.rtu.rhrs ?? 0,
+      startCount: packet.rtu.start ?? 0,
+      stopCount: packet.rtu.stop ?? 0,
       discharge: jockeyDischarge,
       status: jockeyStatus,
       hasStatusRegister: hasJockeyStatus,

@@ -2,13 +2,13 @@
 export interface M3dPacket {
   rtu: {
     /** Jockey total run hours */
-    rhrs: number;
-    stop: number;
+    rhrs?: number;
+    stop?: number;
     /** Jockey start count */
-    start: number;
+    start?: number;
     /** Jockey status register (RTU reg 12) — switch position + status bits */
-    status: number;
-    stcount: number;
+    status?: number;
+    stcount?: number;
   };
   tcp: Record<string, number>;
 }
