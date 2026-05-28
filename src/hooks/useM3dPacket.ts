@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PACKET_API_URL, PACKET_REFRESH_MS } from '../config';
-import { sampleM3dPacket } from '../data/samplePacket';
+import { sampleDevicePacket } from '../data/samplePacket';
 import { normalizePacket } from '../lib/normalizePacket';
-import type { M3dPacket } from '../types/m3d';
+import type { NormalizedDeviceData } from '../types/devicePacket';
 
 export function useM3dPacket() {
-  const [packet, setPacket] = useState<M3dPacket>(() => normalizePacket(sampleM3dPacket));
+  const [packet, setPacket] = useState<NormalizedDeviceData>(() =>
+    normalizePacket(sampleDevicePacket),
+  );
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);

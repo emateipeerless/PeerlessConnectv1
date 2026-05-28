@@ -1,4 +1,11 @@
-import type { AnalogReading, FirePumpSnapshot, StatusItem, SwitchMode } from '../types/m3d';
+import type {
+  AnalogReading,
+  FirePumpSnapshot,
+  HistoricalEvent,
+  HistoricalMetric,
+  StatusItem,
+  SwitchMode,
+} from '../types/m3d';
 import { Lamp } from './StatusBadge';
 import { SwitchPositionDisplay } from './SwitchPositionDisplay';
 
@@ -79,7 +86,7 @@ export function FirePumpDashboard({
   refreshIntervalMs = 7000,
   isLive = false,
 }: FirePumpDashboardProps) {
-  const { mainPump, jockeyPump } = snapshot;
+  const { mainPump, jockeyPump, mainTimestamps, jockeyTimestamps } = snapshot;
   const mainTroubles = mainPump.alarms.filter((a) => a.active && !a.okWhenActive);
   const jockeyTroubles = jockeyPump.status.filter((a) => a.active && !a.okWhenActive);
   const discharge = mainPump.analog.systemDischargePressure;
@@ -91,6 +98,7 @@ export function FirePumpDashboard({
         <div>
           <p className="dashboard__eyebrow">IoT Fire Pump Monitor</p>
           <h1>M3D Controller</h1>
+          {snapshot.deviceId !== null && <p className="dashboard__device">Device ID: {snapshot.deviceId}</p>}
         </div>
         <div className="dashboard__meta">
           <span className="meta-pill">Template: {snapshot.template}</span>
@@ -106,7 +114,10 @@ export function FirePumpDashboard({
       </header>
 
       <section className="pump-section pump-section--main">
-        <h2 className="pump-section__title">Main Pump</h2>
+        <div className="pump-section__heading">
+          <h2 className="pump-section__title">Main Pump</h2>
+          <DataTimestampPanel trending={mainTimestamps.trending} historical={mainTimestamps.historical} />
+        </div>
 
         <div className={`discharge-hero ${dischargeLow ? 'discharge-hero--low' : ''}`}>
           <p className="discharge-hero__label">System Discharge Pressure</p>
@@ -131,10 +142,15 @@ export function FirePumpDashboard({
         </div>
 
         <StatusLampPanel title="Alarms / Status" items={mainPump.alarms} troubleCount={mainTroubles.length} />
+
+        <HistoricalDataPanel metrics={mainPump.historicalMetrics} events={mainPump.historicalEvents} />
       </section>
 
       <section className="pump-section pump-section--jockey">
-        <h2 className="pump-section__title">Jockey Pump</h2>
+        <div className="pump-section__heading">
+          <h2 className="pump-section__title">Jockey Pump</h2>
+          <DataTimestampPanel trending={jockeyTimestamps.trending} historical={jockeyTimestamps.historical} />
+        </div>
 
         {jockeyPump.hasDischargeRegister ? (
           <div className="discharge-hero discharge-hero--jockey">
@@ -186,26 +202,105 @@ function formatValue(value: number, decimals: number): string {
   });
 }
 
+function formatTimestamp(value: string | null): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
+}
+
+function DataTimestampPanel({
+  trending,
+  historical,
+}: {
+  trending: string | null;
+  historical: string | null;
+}) {
+  return (
+    <div className="timestamp-pills">
+      <span className="meta-pill meta-pill--muted meta-pill--tiny">
+        Trend: <span className="timestamp-pills__value">{formatTimestamp(trending)}</span>
+      </span>
+      <span className="meta-pill meta-pill--muted meta-pill--tiny">
+        Hist: <span className="timestamp-pills__value">{formatTimestamp(historical)}</span>
+      </span>
+    </div>
+  );
+}
+
+function HistoricalDataPanel({
+  metrics,
+  events,
+}: {
+  metrics: HistoricalMetric[];
+  events: HistoricalEvent[];
+}) {
+  return (
+    <>
+      <div className="panel">
+        <h3>Historical Metrics</h3>
+        {metrics.length === 0 ? (
+          <p className="panel-unavailable">No historical metrics in this packet.</p>
+        ) : (
+          <div className="metric-grid">
+            {metrics.map((metric) => (
+              <Metric key={metric.id} label={metric.label} value={metric.value} unit={metric.unit} decimals={metric.decimals} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Historical Events</h3>
+        {events.length === 0 ? (
+          <p className="panel-unavailable">No historical event timestamps in this packet.</p>
+        ) : (
+          <div className="event-grid">
+            {events.map((event) => (
+              <HistoricalEventItem key={event.id} event={event} />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function HistoricalEventItem({ event }: { event: HistoricalEvent }) {
+  return (
+    <div className="event-item">
+      <p className="event-item__title">{event.label}</p>
+      <p className="event-item__date">{formatTimestamp(event.at)}</p>
+    </div>
+  );
+}
+
 function Metric({
   label,
   value,
   reading,
+  valueLabel,
+  unit,
+  decimals,
 }: {
   label?: string;
   value?: number;
   reading?: AnalogReading;
+  valueLabel?: string;
+  unit?: string;
+  decimals?: number;
 }) {
   const displayLabel = reading?.label ?? label ?? '';
-  const displayValue = reading?.value ?? value ?? 0;
-  const decimals = reading?.decimals ?? 0;
-  const unit = reading?.unit;
+  const numericValue = reading?.value ?? value ?? 0;
+  const displayValue = valueLabel ?? formatValue(numericValue, reading?.decimals ?? decimals ?? 0);
+  const displayUnit = reading?.unit ?? unit;
 
   return (
     <div className="metric">
       <span className="metric__label">{displayLabel}</span>
       <span className="metric__value">
-        {formatValue(displayValue, decimals)}
-        {unit && <span className="metric__unit">{unit}</span>}
+        {displayValue}
+        {displayUnit && <span className="metric__unit">{displayUnit}</span>}
       </span>
     </div>
   );

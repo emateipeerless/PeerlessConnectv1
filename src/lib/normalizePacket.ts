@@ -1,10 +1,41 @@
-import type { M3dPacket } from '../types/m3d';
+import type { ControllerBlocks, NormalizedDeviceData, RegisterSnapshot } from '../types/devicePacket';
 import { JOCKEY_RTU_STATUS_REG } from './m3dRegisters';
 
 const RTU_COUNTER_KEYS = ['rhrs', 'stop', 'start', 'status', 'stcount'] as const;
 
+const emptyBlock = (): RegisterSnapshot => ({
+  timestamp: null,
+  registers: {},
+});
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+function pickRegisters(src: Record<string, unknown> | undefined): Record<string, number> {
+  if (!src) return {};
+  const registers: Record<string, number> = {};
+  for (const [key, value] of Object.entries(src)) {
+    if (!/^\d+$/.test(key)) continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) registers[key] = n;
+  }
+  return registers;
+}
+
+function pickTimestamp(src: Record<string, unknown> | undefined): string | null {
+  const raw = src?.timestamp;
+  return typeof raw === 'string' && raw.length > 0 ? raw : null;
+}
+
+function parseRegisterBlock(src: unknown): RegisterSnapshot {
+  const block = asRecord(src);
+  if (!block) return emptyBlock();
+  return {
+    timestamp: pickTimestamp(block),
+    registers: pickRegisters(asRecord(block.registers) ?? block),
+    rowFound: block.rowFound === true,
+  };
 }
 
 function pickRtuField(
@@ -18,56 +49,116 @@ function pickRtuField(
   return Number.isFinite(n) ? n : undefined;
 }
 
-/** Modbus register keys are numeric strings (e.g. "2006"); skip metadata like deviceid/timestamp. */
-function pickTcpRegisters(src: Record<string, unknown> | undefined): Record<string, number> {
-  if (!src) return {};
-  const tcp: Record<string, number> = {};
-  for (const [key, value] of Object.entries(src)) {
-    if (!/^\d+$/.test(key)) continue;
-    const n = Number(value);
-    if (Number.isFinite(n)) tcp[key] = n;
-  }
-  return tcp;
+function isV2Packet(root: Record<string, unknown>): boolean {
+  const controllers = asRecord(root.controllers);
+  return Boolean(controllers && asRecord(controllers.main));
 }
 
-/**
- * Ensure packet shape is safe to decode.
- *
- * Production API envelope:
- * `{ status: "success", deviceid, rtu: { status, rhrs, stop, start, stcount, … }, tcp: { "1001": … } }`
- *
- * Also accepts legacy shapes where Modbus registers were duplicated under `rtu`.
- */
-export function normalizePacket(raw: unknown): M3dPacket {
-  const root = asRecord(raw) ?? {};
-  const rtuSrc = asRecord(root.rtu);
-  const tcpSrc = asRecord(root.tcp);
-  // Registers live on `tcp`; legacy packets may still embed numeric keys on `rtu`.
-  const tcp = { ...pickTcpRegisters(rtuSrc), ...pickTcpRegisters(tcpSrc) };
+function normalizeV2(root: Record<string, unknown>): NormalizedDeviceData {
+  const controllers = asRecord(root.controllers)!;
+  const main = asRecord(controllers.main)!;
+  const jockey = asRecord(controllers.jockey)!;
 
   return {
-    rtu: {
-      rhrs: pickRtuField(rtuSrc, 'rhrs'),
-      stop: pickRtuField(rtuSrc, 'stop'),
-      start: pickRtuField(rtuSrc, 'start'),
-      // Jockey status word — RTU field `status` (register 12), not the API envelope `status`.
-      status:
-        pickRtuField(rtuSrc, 'status') ??
-        (JOCKEY_RTU_STATUS_REG in tcp ? tcp[JOCKEY_RTU_STATUS_REG] : undefined),
-      stcount: pickRtuField(rtuSrc, 'stcount'),
+    format: 'v2',
+    fetchedAt: typeof root.fetchedAt === 'string' ? root.fetchedAt : null,
+    deviceId: typeof root.deviceId === 'number' ? root.deviceId : Number(root.deviceId) || null,
+    main: {
+      trending: parseRegisterBlock(main.trending),
+      historical: parseRegisterBlock(main.historical),
     },
-    tcp,
+    jockey: {
+      trending: parseRegisterBlock(jockey.trending),
+      historical: parseRegisterBlock(jockey.historical),
+    },
   };
 }
 
-export function hasTcpRegister(packet: M3dPacket, reg: string): boolean {
-  return Object.prototype.hasOwnProperty.call(packet.tcp, reg);
+/**
+ * Legacy `{ rtu, tcp }` shape — all registers treated as trending.
+ */
+function normalizeLegacy(root: Record<string, unknown>): NormalizedDeviceData {
+  const rtuSrc = asRecord(root.rtu);
+  const tcpSrc = asRecord(root.tcp);
+  const mainRegisters = { ...pickRegisters(rtuSrc), ...pickRegisters(tcpSrc) };
+
+  const jockeyRegisters: Record<string, number> = {};
+  const rhrs = pickRtuField(rtuSrc, 'rhrs');
+  const stop = pickRtuField(rtuSrc, 'stop');
+  const start = pickRtuField(rtuSrc, 'start');
+  const status =
+    pickRtuField(rtuSrc, 'status') ??
+    (JOCKEY_RTU_STATUS_REG in mainRegisters ? mainRegisters[JOCKEY_RTU_STATUS_REG] : undefined);
+
+  if (rhrs !== undefined) jockeyRegisters['rhrs'] = rhrs;
+  if (stop !== undefined) jockeyRegisters['stop'] = stop;
+  if (start !== undefined) jockeyRegisters['start'] = start;
+  if (status !== undefined) jockeyRegisters[JOCKEY_RTU_STATUS_REG] = status;
+
+  const jockeyDischarge = mainRegisters['18'];
+  if (jockeyDischarge !== undefined) {
+    jockeyRegisters['18'] = jockeyDischarge;
+    delete mainRegisters['18'];
+  }
+  if (status !== undefined && JOCKEY_RTU_STATUS_REG in mainRegisters) {
+    delete mainRegisters[JOCKEY_RTU_STATUS_REG];
+  }
+
+  return {
+    format: 'legacy',
+    fetchedAt: null,
+    deviceId: typeof root.deviceid === 'number' ? root.deviceid : Number(root.deviceid) || null,
+    main: {
+      trending: { timestamp: null, registers: mainRegisters },
+      historical: emptyBlock(),
+    },
+    jockey: {
+      trending: { timestamp: null, registers: jockeyRegisters },
+      historical: emptyBlock(),
+    },
+  };
 }
 
-/** True when the normalized packet includes an RTU field (e.g. status = register 12). */
-export function hasRtuField(
-  packet: M3dPacket,
-  field: keyof M3dPacket['rtu'],
-): boolean {
-  return packet.rtu[field] !== undefined;
+/**
+ * Normalize API or pasted JSON into trending + historical blocks per controller.
+ */
+export function normalizePacket(raw: unknown): NormalizedDeviceData {
+  const root = asRecord(raw) ?? {};
+  if (isV2Packet(root)) return normalizeV2(root);
+  return normalizeLegacy(root);
+}
+
+export function getMergedRegister(
+  blocks: ControllerBlocks,
+  reg: string,
+): number | undefined {
+  if (Object.prototype.hasOwnProperty.call(blocks.trending.registers, reg)) {
+    return blocks.trending.registers[reg];
+  }
+  if (Object.prototype.hasOwnProperty.call(blocks.historical.registers, reg)) {
+    return blocks.historical.registers[reg];
+  }
+  return undefined;
+}
+
+export function hasMergedRegister(blocks: ControllerBlocks, reg: string): boolean {
+  return getMergedRegister(blocks, reg) !== undefined;
+}
+
+/** @deprecated Use hasMergedRegister on main blocks */
+export function hasTcpRegister(packet: { main: ControllerBlocks }, reg: string): boolean {
+  return hasMergedRegister(packet.main, reg);
+}
+
+/** Jockey legacy RTU counter stored under symbolic keys in trending block. */
+export function getJockeyRtuField(
+  blocks: ControllerBlocks,
+  field: 'rhrs' | 'stop' | 'start',
+): number | undefined {
+  const raw = blocks.trending.registers[field] ?? blocks.historical.registers[field];
+  return raw !== undefined && Number.isFinite(raw) ? raw : undefined;
+}
+
+export function hasJockeyStatus(blocks: ControllerBlocks): boolean {
+  return hasMergedRegister(blocks, JOCKEY_RTU_STATUS_REG);
 }

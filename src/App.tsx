@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { PACKET_API_URL } from './config';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FirePumpDashboard } from './components/FirePumpDashboard';
-import { sampleM3dPacket } from './data/samplePacket';
+import { sampleDevicePacket } from './data/samplePacket';
 import { decodeM3dPacket } from './lib/decodeM3d';
 import { normalizePacket } from './lib/normalizePacket';
 import { useM3dPacket } from './hooks/useM3dPacket';
@@ -19,7 +19,7 @@ function App() {
     refreshIntervalMs,
   } = useM3dPacket();
 
-  const [manualJson, setManualJson] = useState(() => JSON.stringify(sampleM3dPacket, null, 2));
+  const [manualJson, setManualJson] = useState(() => JSON.stringify(sampleDevicePacket, null, 2));
 
   const { activePacket, parseError } = useMemo(() => {
     if (isLive) {
@@ -91,7 +91,7 @@ function App() {
           <button
             type="button"
             className="debug-panel__reset"
-            onClick={() => handleManualChange(JSON.stringify(sampleM3dPacket, null, 2))}
+            onClick={() => handleManualChange(JSON.stringify(sampleDevicePacket, null, 2))}
           >
             Reset to sample packet
           </button>

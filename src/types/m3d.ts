@@ -44,11 +44,33 @@ export interface StatusItem {
 /** @deprecated Use StatusItem */
 export type AlarmItem = StatusItem;
 
+export interface HistoricalMetric {
+  id: string;
+  label: string;
+  value: number;
+  unit: string;
+  decimals: number;
+}
+
+export interface HistoricalEvent {
+  id: string;
+  label: string;
+  /** ISO timestamp when all register parts are present */
+  at: string | null;
+}
+
+export interface DataTimestamps {
+  trending: string | null;
+  historical: string | null;
+}
+
 export interface MainPumpState {
   switchMode: SwitchMode;
   analog: AnalogValues;
   analogs: AnalogReading[];
   alarms: StatusItem[];
+  historicalMetrics: HistoricalMetric[];
+  historicalEvents: HistoricalEvent[];
 }
 
 export interface JockeyPumpState {
@@ -68,6 +90,9 @@ export interface JockeyPumpState {
 export interface FirePumpSnapshot {
   template: 'M3D';
   receivedAt: string;
+  deviceId: number | null;
+  mainTimestamps: DataTimestamps;
+  jockeyTimestamps: DataTimestamps;
   mainPump: MainPumpState;
   jockeyPump: JockeyPumpState;
 }

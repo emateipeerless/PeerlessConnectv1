@@ -36,6 +36,12 @@
   font-weight: 600;
 }
 
+.dashboard__device {
+  margin: 0.35rem 0 0;
+  color: #9aa8bf;
+  font-size: 0.85rem;
+}
+
 .dashboard__meta {
   display: flex;
   gap: 0.5rem;
@@ -75,8 +81,17 @@
   margin-bottom: 2rem;
 }
 
+.pump-section__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
 .pump-section__title {
-  margin: 0 0 1rem;
+  margin: 0;
   font-size: 1.15rem;
   font-weight: 600;
   color: #e8edf5;
@@ -111,6 +126,21 @@
 
 .panel--inline {
   margin-bottom: 0;
+}
+
+.timestamp-pills {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.meta-pill--tiny {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.timestamp-pills__value {
+  color: #c5d0e0;
 }
 
 .panel h3 {
@@ -298,6 +328,36 @@
   gap: 0.75rem;
 }
 
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.65rem;
+}
+
+.event-item {
+  padding: 0.75rem 0.85rem;
+  background: #0d1422;
+  border-radius: 8px;
+  border: 1px solid #1e2d45;
+}
+
+.event-item__title {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e8edf5;
+}
+
+.event-item__date {
+  margin: 0;
+  font-size: 0.76rem;
+  color: #8b98b0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .metric-grid--compact {
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 }
@@ -325,6 +385,9 @@
   font-size: 1.35rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
 }
 
 .metric__unit {
