@@ -73,11 +73,25 @@ export interface MainPumpState {
   historicalEvents: HistoricalEvent[];
 }
 
+export interface JockeyOperatingMetric {
+  id: string;
+  label: string;
+  value: number;
+  unit: string;
+  decimals: number;
+  /** Wider stacked layout for long labels (e.g. pressure settings) */
+  variant?: 'pressure-setting';
+}
+
 export interface JockeyPumpState {
   switchMode: SwitchMode;
   runHours: number;
+  /** Decimal places for run hours display (FCJC reg 6 uses ÷100 scaling) */
+  runHoursDecimals: number;
   startCount: number;
   stopCount: number;
+  /** Profile-specific operating stats (e.g. FCJC pressure settings) */
+  operatingMetrics: JockeyOperatingMetric[];
   /** null until TCP register 18 is available in the packet */
   discharge: number | null;
   status: StatusItem[];
@@ -87,12 +101,33 @@ export interface JockeyPumpState {
   hasDischargeRegister: boolean;
 }
 
+import type { DeviceProfileId } from '../config/devices';
+
+export type { DeviceProfileId };
+
+export type MainControllerBadge = 'MK3D' | 'MK3E';
+
+export type ProfileDecodedSnapshot = Omit<
+  FirePumpSnapshot,
+  'mainControllerOffline' | 'jockeyControllerOffline'
+>;
+
 export interface FirePumpSnapshot {
-  template: 'M3D';
+  /** Header pill label — MK3D (diesel) or MK3E (electric) */
+  controllerBadge: MainControllerBadge;
+  profileId: DeviceProfileId;
+  configurationLabel: string;
+  mainAnalogSectionTitle: string;
+  lowPressureAlarmId: string;
+  mainSwitchAvailable: boolean;
   receivedAt: string;
   deviceId: number | null;
   mainTimestamps: DataTimestamps;
   jockeyTimestamps: DataTimestamps;
+  /** Latest packet has all-zero / missing registers for main controller */
+  mainControllerOffline: boolean;
+  /** Latest packet has all-zero / missing registers for jockey controller */
+  jockeyControllerOffline: boolean;
   mainPump: MainPumpState;
   jockeyPump: JockeyPumpState;
 }

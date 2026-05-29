@@ -1,25 +1,35 @@
 import { useMemo, useState } from 'react';
-import { PACKET_API_URL } from './config';
+import { DEVICE_TABS } from './config/devices';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { DeviceSidebar } from './components/DeviceSidebar';
 import { FirePumpDashboard } from './components/FirePumpDashboard';
-import { sampleDevicePacket } from './data/samplePacket';
-import { decodeM3dPacket } from './lib/decodeM3d';
+import { getSamplePacketForDevice } from './data/samples';
+import { decodeDevicePacket } from './lib/decodeDevicePacket';
 import { normalizePacket } from './lib/normalizePacket';
-import { useM3dPacket } from './hooks/useM3dPacket';
+import { useDevicePacket } from './hooks/useDevicePacket';
 import './App.css';
 
 function App() {
+  const [selectedDeviceId, setSelectedDeviceId] = useState(123);
+  const selectedTab = DEVICE_TABS.find((t) => t.id === selectedDeviceId) ?? DEVICE_TABS[0];
+
   const {
     packet,
     fetchError,
     lastRefresh,
     isRefreshing,
     isLive,
+    apiUrl,
     setManualPacket,
     refreshIntervalMs,
-  } = useM3dPacket();
+  } = useDevicePacket(selectedDeviceId);
 
-  const [manualJson, setManualJson] = useState(() => JSON.stringify(sampleDevicePacket, null, 2));
+  const [manualJsonByDevice, setManualJsonByDevice] = useState<Record<number, string>>(() => ({
+    123: JSON.stringify(getSamplePacketForDevice(123), null, 2),
+    124: JSON.stringify(getSamplePacketForDevice(124), null, 2),
+  }));
+
+  const manualJson = manualJsonByDevice[selectedDeviceId] ?? JSON.stringify(getSamplePacketForDevice(selectedDeviceId), null, 2);
 
   const { activePacket, parseError } = useMemo(() => {
     if (isLive) {
@@ -38,13 +48,13 @@ function App() {
     }
   }, [isLive, packet, manualJson]);
 
-  const snapshot = useMemo(() => decodeM3dPacket(activePacket), [activePacket]);
+  const snapshot = useMemo(() => decodeDevicePacket(activePacket), [activePacket]);
 
   const displayJson = isLive ? JSON.stringify(packet, null, 2) : manualJson;
   const displayError = fetchError ?? parseError;
 
   const handleManualChange = (json: string) => {
-    setManualJson(json);
+    setManualJsonByDevice((prev) => ({ ...prev, [selectedDeviceId]: json }));
     try {
       setManualPacket(json);
     } catch {
@@ -52,30 +62,43 @@ function App() {
     }
   };
 
+  const handleDeviceChange = (deviceId: number) => {
+    setSelectedDeviceId(deviceId);
+  };
+
+  const handleResetSample = () => {
+    handleManualChange(JSON.stringify(getSamplePacketForDevice(selectedDeviceId), null, 2));
+  };
+
   return (
     <div className="app">
-      <ErrorBoundary>
-        <FirePumpDashboard
-          snapshot={snapshot}
-          lastRefresh={lastRefresh}
-          isRefreshing={isRefreshing}
-          refreshIntervalMs={refreshIntervalMs}
-          isLive={isLive}
-        />
-      </ErrorBoundary>
+      <DeviceSidebar selectedDeviceId={selectedDeviceId} onSelectDevice={handleDeviceChange} />
+
+      <main className="app__main">
+        <ErrorBoundary>
+          <FirePumpDashboard
+            snapshot={snapshot}
+            lastRefresh={lastRefresh}
+            isRefreshing={isRefreshing}
+            refreshIntervalMs={refreshIntervalMs}
+            isLive={isLive}
+          />
+        </ErrorBoundary>
+      </main>
 
       <aside className="debug-panel">
-        <h3>Live packet (M3D)</h3>
+        <h3>Live packet</h3>
         <p className="debug-panel__hint">
           {isLive ? (
             <>
-              Auto-refreshing every {refreshIntervalMs / 1000}s from{' '}
-              <code>{PACKET_API_URL}</code>
+              Device <strong>{selectedDeviceId}</strong> · {selectedTab.subtitle}
+              <br />
+              Auto-refreshing every {refreshIntervalMs / 1000}s from <code>{apiUrl}</code>
             </>
           ) : (
             <>
-              Set <code>VITE_PACKET_API_URL</code> in <code>.env</code> for live polling every{' '}
-              {refreshIntervalMs / 1000}s. Until then, paste JSON below.
+              Device <strong>{selectedDeviceId}</strong> · paste JSON or set{' '}
+              <code>VITE_PACKET_API_URL</code> in <code>.env</code> (uses <code>deviceid</code> query param).
             </>
           )}
         </p>
@@ -88,11 +111,7 @@ function App() {
           spellCheck={false}
         />
         {!isLive && (
-          <button
-            type="button"
-            className="debug-panel__reset"
-            onClick={() => handleManualChange(JSON.stringify(sampleDevicePacket, null, 2))}
-          >
+          <button type="button" className="debug-panel__reset" onClick={handleResetSample}>
             Reset to sample packet
           </button>
         )}

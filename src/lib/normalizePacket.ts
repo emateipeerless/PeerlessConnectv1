@@ -63,6 +63,8 @@ function normalizeV2(root: Record<string, unknown>): NormalizedDeviceData {
     format: 'v2',
     fetchedAt: typeof root.fetchedAt === 'string' ? root.fetchedAt : null,
     deviceId: typeof root.deviceId === 'number' ? root.deviceId : Number(root.deviceId) || null,
+    mainControllerType: typeof main.controllerType === 'string' ? main.controllerType : null,
+    jockeyControllerType: typeof jockey.controllerType === 'string' ? jockey.controllerType : null,
     main: {
       trending: parseRegisterBlock(main.trending),
       historical: parseRegisterBlock(main.historical),
@@ -108,6 +110,8 @@ function normalizeLegacy(root: Record<string, unknown>): NormalizedDeviceData {
     format: 'legacy',
     fetchedAt: null,
     deviceId: typeof root.deviceid === 'number' ? root.deviceid : Number(root.deviceid) || null,
+    mainControllerType: null,
+    jockeyControllerType: null,
     main: {
       trending: { timestamp: null, registers: mainRegisters },
       historical: emptyBlock(),

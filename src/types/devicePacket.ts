@@ -42,6 +42,8 @@ export interface NormalizedDeviceData {
   format: 'v2' | 'legacy';
   fetchedAt: string | null;
   deviceId: number | null;
+  mainControllerType: string | null;
+  jockeyControllerType: string | null;
   main: ControllerBlocks;
   jockey: ControllerBlocks;
 }
